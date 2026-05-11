@@ -10,7 +10,15 @@ from telegram_sender import send_to_telegram
 
 load_dotenv()
 
+from flask import Blueprint
+
+PORT   = int(os.getenv("PORT", 5000))
+PREFIX = os.getenv("URL_PREFIX", "/scheduler").rstrip("/")
+
 app = Flask(__name__)
+app.config["APPLICATION_ROOT"] = PREFIX
+
+bp = Blueprint("scheduler", __name__)
 CONFIG_FILE = "config.json"
 
 # Keys that belong to a snapshot (per-month config)
@@ -128,12 +136,12 @@ scheduler.start()
 
 # ── Routes ───────────────────────────────────────────────────────
 
-@app.route("/")
+@bp.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", prefix=PREFIX)
 
 
-@app.route("/api/config", methods=["GET"])
+@bp.route("/api/config", methods=["GET"])
 def get_config_route():
     cfg = load_config()
     return jsonify({
@@ -143,7 +151,7 @@ def get_config_route():
     })
 
 
-@app.route("/api/config", methods=["POST"])
+@bp.route("/api/config", methods=["POST"])
 def update_global_config():
     """Save global settings (autosend). Snapshots managed separately."""
     cfg  = load_config()
@@ -154,7 +162,7 @@ def update_global_config():
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/snapshot/<int:year>/<int:month>", methods=["GET"])
+@bp.route("/api/snapshot/<int:year>/<int:month>", methods=["GET"])
 def get_snapshot(year, month):
     cfg          = load_config()
     snap, src    = get_snapshot_for_month(cfg, year, month)
@@ -167,7 +175,7 @@ def get_snapshot(year, month):
     })
 
 
-@app.route("/api/snapshot/<int:year>/<int:month>", methods=["POST"])
+@bp.route("/api/snapshot/<int:year>/<int:month>", methods=["POST"])
 def save_snapshot(year, month):
     cfg  = load_config()
     data = request.json
@@ -179,7 +187,7 @@ def save_snapshot(year, month):
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/snapshot/<int:year>/<int:month>", methods=["DELETE"])
+@bp.route("/api/snapshot/<int:year>/<int:month>", methods=["DELETE"])
 def delete_snapshot(year, month):
     cfg = load_config()
     key = f"{year}-{month:02d}"
@@ -188,7 +196,7 @@ def delete_snapshot(year, month):
     return jsonify({"status": "ok"})
 
 
-@app.route("/api/preview")
+@bp.route("/api/preview")
 def preview():
     year  = int(request.args.get("year",  date.today().year))
     month = int(request.args.get("month", date.today().month))
@@ -202,7 +210,7 @@ def preview():
     })
 
 
-@app.route("/api/generate_pdf")
+@bp.route("/api/generate_pdf")
 def generate_pdf_route():
     year  = int(request.args.get("year",  date.today().year))
     month = int(request.args.get("month", date.today().month))
@@ -214,7 +222,7 @@ def generate_pdf_route():
                      mimetype="application/pdf")
 
 
-@app.route("/api/send_telegram", methods=["POST"])
+@bp.route("/api/send_telegram", methods=["POST"])
 def send_telegram_route():
     token    = os.getenv("TELEGRAM_TOKEN", "")
     chat_ids = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -230,11 +238,8 @@ def send_telegram_route():
     return jsonify(send_to_telegram(pdf_path, token, chat_ids, year, month))
 
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
 
-
-@app.route("/api/preview_live")
+@bp.route("/api/preview_live")
 def preview_live():
     """Preview schedule from URL params without touching saved config."""
     year          = int(request.args.get("year",  date.today().year))
@@ -256,3 +261,9 @@ def preview_live():
         "anchor_room":   anchor_room,
     }
     return jsonify({"schedule": build_schedule(year, month, snap)})
+
+app.register_blueprint(bp, url_prefix=PREFIX)
+
+if __name__ == "__main__":
+    print(f"Running on http://localhost:{PORT}{PREFIX}")
+    app.run(host='0.0.0.0', port=PORT)
