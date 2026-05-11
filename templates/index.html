@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f18;
+    --surface: #17172a;
+    --surface2: #1e1e35;
+    --border: #2e2e50;
+    --accent: #7c6af7;
+    --accent2: #a89af9;
+    --accent-glow: rgba(124,106,247,0.18);
+    --text: #e8e8f8;
+    --text-muted: #888899;
+    --text-dim: #555570;
+    --green: #4ecf8a;
+    --red: #f06478;
+    --yellow: #f0c060;
+    --weekend: #2a1a35;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    padding: 24px;
+  }
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; align-items: start; }
+
+  /* Header */
+  .header { grid-column: 1/-1; display: flex; align-items: baseline; gap: 16px; margin-bottom: 4px; }
+  .header h1 { font-family: 'Playfair Display', serif; font-size: 2rem; color: var(--accent2); letter-spacing: -0.5px; }
+  .header span { color: var(--text-muted); font-size: 0.85rem; }
+
+  /* Panels */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .panel-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Room list */
+  .rooms-list { display: flex; flex-direction: column; gap: 6px; max-height: 380px; overflow-y: auto; }
+  .rooms-list::-webkit-scrollbar { width: 4px; }
+  .rooms-list::-webkit-scrollbar-track { background: transparent; }
+  .rooms-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .room-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px;
+    cursor: grab; transition: all 0.15s;
+    user-select: none;
+  }
+  .room-item:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
+  .room-item.dragging { opacity: 0.4; }
+  .room-item.drag-over { border-color: var(--accent); background: var(--accent-glow); }
+  .room-item.inactive { opacity: 0.45; }
+  .drag-handle { color: var(--text-dim); font-size: 0.9rem; cursor: grab; flex-shrink: 0; }
+  .room-badge {
+    background: var(--accent); color: white; border-radius: 6px;
+    min-width: 32px; text-align: center; font-size: 0.8rem;
+    font-weight: 600; padding: 2px 6px;
+  }
+  .room-item.inactive .room-badge { background: var(--text-dim); }
+  .room-label { flex: 1; font-size: 0.88rem; }
+  .toggle-btn {
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text-muted); cursor: pointer; font-size: 0.7rem;
+    padding: 2px 7px; transition: all 0.15s; flex-shrink: 0;
+  }
+  .toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .room-item.inactive .toggle-btn { border-color: var(--green); color: var(--green); }
+
+  /* Inputs */
+  .form-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .form-row label { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+  .form-row input, .form-row select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; padding: 8px 11px;
+    font-family: inherit; font-size: 0.88rem; width: 100%;
+    outline: none; transition: border-color 0.15s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--accent); }
+  .form-row select option { background: var(--surface2); }
+
+  /* Anchor section */
+  .anchor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hint { font-size: 0.72rem; color: var(--text-dim); margin-top: -8px; margin-bottom: 10px; line-height: 1.4; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: none; border-radius: 8px; padding: 10px 18px;
+    font-family: inherit; font-size: 0.88rem; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; width: 100%; justify-content: center;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 15px rgba(124,106,247,0.35); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-tg { background: #229ED9; color: white; }
+  .btn-tg:hover { background: #1a8fcc; transform: translateY(-1px); }
+  .btn-save { background: transparent; color: var(--green); border: 1px solid var(--green); }
+  .btn-save:hover { background: rgba(78,207,138,0.1); }
+  .btn-group { display: flex; flex-direction: column; gap: 8px; }
+
+  /* Month navigator */
+  .month-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .month-nav button {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; width: 34px; height: 34px;
+    cursor: pointer; font-size: 1rem; transition: all 0.15s;
+  }
+  .month-nav button:hover { border-color: var(--accent); color: var(--accent); }
+  .month-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--accent2); flex: 1; }
+
+  /* Calendar grid */
+  .calendar-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+  }
+  .cal-header {
+    text-align: center; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 1px; color: var(--text-dim); padding: 6px 0;
+    text-transform: uppercase;
+  }
+  .cal-header.weekend { color: var(--accent); }
+  .cal-day {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 5px; text-align: center;
+    transition: all 0.15s; min-height: 56px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .cal-day.weekend { background: var(--weekend); border-color: #3a2248; }
+  .cal-day.empty { background: transparent; border-color: transparent; }
+  .cal-day.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
+  .day-num { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
+  .day-room { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+  .cal-day.weekend .day-room { color: var(--accent2); }
+
+  /* Table view */
+  .schedule-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .schedule-table th {
+    background: var(--surface2); color: var(--text-muted);
+    font-size: 0.7rem; letter-spacing: 1.5px; text-transform: uppercase;
+    font-weight: 600; padding: 10px 14px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .schedule-table td { padding: 8px 14px; border-bottom: 1px solid rgba(46,46,80,0.5); }
+  .schedule-table tr:hover td { background: rgba(124,106,247,0.05); }
+  .schedule-table tr.weekend td { background: rgba(42,26,53,0.4); }
+  .schedule-table tr.today-row td { background: var(--accent-glow); }
+  .room-pill {
+    background: var(--accent); color: white; border-radius: 5px;
+    padding: 2px 9px; font-weight: 600; font-size: 0.82rem; display: inline-block;
+  }
+  .wd-badge { color: var(--text-dim); font-size: 0.8rem; }
+  .wd-badge.wend { color: var(--accent); }
+
+  /* View toggle */
+  .view-toggle { display: flex; gap: 6px; }
+  .vt-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-muted); border-radius: 6px; padding: 5px 11px;
+    cursor: pointer; font-size: 0.78rem; transition: all 0.15s;
+  }
+  .vt-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab {
+    padding: 8px 14px; cursor: pointer; font-size: 0.82rem; color: var(--text-muted);
+    border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 18px;
+    font-size: 0.85rem; z-index: 1000; transform: translateY(80px);
+    transition: transform 0.3s; box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+  .toast.show { transform: translateY(0); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* Settings panel hidden by default */
+  .settings-section { display: none; }
+  .settings-section.visible { display: block; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .header { grid-column: 1; }
+    .calendar-grid { grid-template-columns: repeat(7, 1fr); }
+  }
+  .autosend-row {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-muted); font-size: 0.82rem;
+    cursor: pointer; padding: 4px 0; user-select: none;
+  }
+  .autosend-row input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+  .autosend-row:has(input:checked) { color: var(--green); }
+
+  .snapshot-badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 4px;
+    font-weight: 600; letter-spacing: 0.5px;
+  }
+  .snapshot-badge.own   { background: rgba(78,207,138,0.15); color: var(--green); border: 1px solid var(--green); }
+  .snapshot-badge.inherited { background: rgba(124,106,247,0.12); color: var(--accent2); border: 1px solid var(--accent); }
+  .snapshot-badge.none  { background: rgba(240,100,120,0.12); color: var(--red); border: 1px solid var(--red); }
+  .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+  .btn-danger:hover { background: rgba(240,100,120,0.1); }
+
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- LEFT PANEL -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+
+    <!-- Month selector -->
+    <div class="panel">
+      <div class="panel-title">Месяц</div>
+      <div class="month-nav">
+        <button onclick="changeMonth(-1)">‹</button>
+        <div class="month-title" id="monthTitle"></div>
+        <button onclick="changeMonth(1)">›</button>
+      </div>
+      <div id="snapshotBadge" style="margin-bottom:10px;"></div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="downloadPdf()">⬇ Скачать PDF</button>
+        <button class="btn btn-tg" onclick="sendTelegram()">✈ Отправить в Telegram</button>
+        <label class="autosend-row">
+          <input type="checkbox" id="autosend" onchange="saveGlobalConfig()">
+          <span>Автоотправка</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Snapshot controls -->
+    <div class="panel">
+      <div class="panel-title">Конфиг этого месяца</div>
+      <p class="hint" id="snapshotHint" style="margin-bottom:12px;"></p>
+      <div class="btn-group">
+        <button class="btn btn-save" onclick="saveSnapshot()">✦ Сохранить конфиг для этого месяца</button>
+        <button class="btn btn-danger" id="deleteSnapshotBtn" onclick="deleteSnapshot()" style="display:none;">✕ Удалить снапшот</button>
+      </div>
+    </div>
+
+    <!-- Rooms -->
+    <div class="panel">
+      <div class="panel-title">Комнаты и порядок</div>
+      <p class="hint" style="margin-bottom:10px;">Перетащите для изменения порядка. Нажмите «выкл» чтобы пропустить комнату.</p>
+      <div class="rooms-list" id="roomsList"></div>
+    </div>
+
+    <!-- Anchor settings -->
+    <div class="panel">
+      <div class="panel-title">Точка отсчёта</div>
+      <p class="hint">Укажите дату и комнату — скрипт выстроит расписание от этой точки.</p>
+      <div class="anchor-grid">
+        <div class="form-row">
+          <label>Дата</label>
+          <input type="date" id="anchorDate">
+        </div>
+        <div class="form-row">
+          <label>Комната</label>
+          <select id="anchorRoom"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Дней на комнату</label>
+        <input type="number" id="daysPerRoom" min="1" max="7" value="2">
+      </div>
+      <button class="btn btn-save" onclick="applySettings()">↻ Применить</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel" style="overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="panel-title" style="margin-bottom:0;border:none;padding:0;" id="scheduleTitle">График</div>
+      <div class="view-toggle">
+        <button class="vt-btn active" onclick="setView('table')" id="vt-table">Список</button>
+        <button class="vt-btn" onclick="setView('calendar')" id="vt-calendar">Календарь</button>
+      </div>
+    </div>
+    <div id="scheduleContainer"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MONTHS_RU = ["","Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+const WD = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
+const today = new Date();
+
+let curYear  = today.getFullYear();
+let curMonth = today.getMonth() + 1;
+
+// Global config (rooms list, autosend)
+let globalConfig = {};
+
+// Current working snapshot — what's shown in the left panel
+// May differ from the saved snapshot if user made changes
+let snap = {};
+
+// Snapshot metadata for current month
+let curSnapshotMeta = { own_snapshot: false, source_key: null };
+
+let schedule     = {};
+let currentView  = 'table';
+let dragSrcIndex = null;
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  globalConfig = await fetch('/api/config').then(r => r.json());
+  document.getElementById('autosend').checked = !!globalConfig.autosend;
+  await loadMonth();
+}
+
+// ── Load month: fetch snapshot + schedule ────────────────────────
+async function loadMonth() {
+  document.getElementById('monthTitle').textContent = `${MONTHS_RU[curMonth]} ${curYear}`;
+  document.getElementById('scheduleTitle').textContent = `График — ${MONTHS_RU[curMonth]} ${curYear}`;
+
+  const [snapResp, previewResp] = await Promise.all([
+    fetch(`/api/snapshot/${curYear}/${curMonth}`).then(r => r.json()),
+    fetch(`/api/preview?year=${curYear}&month=${curMonth}`).then(r => r.json()),
+  ]);
+
+  snap            = snapResp.snapshot;
+  curSnapshotMeta = { own_snapshot: snapResp.own_snapshot, source_key: snapResp.source_key };
+  schedule        = previewResp.schedule;
+
+  applySnapToPanel();
+  updateSnapshotUI();
+  renderSchedule();
+}
+
+// ── Apply snap data → left panel fields ──────────────────────────
+function applySnapToPanel() {
+  document.getElementById('anchorDate').value  = snap.anchor_date;
+  document.getElementById('daysPerRoom').value = snap.days_per_room;
+  // Rebuild rooms list
+  populateRooms();
+  populateAnchorRoom();
+}
+
+// ── Snapshot badge + hint + delete button ────────────────────────
+function updateSnapshotUI() {
+  const badge  = document.getElementById('snapshotBadge');
+  const hint   = document.getElementById('snapshotHint');
+  const delBtn = document.getElementById('deleteSnapshotBtn');
+  const key    = `${curYear}-${String(curMonth).padStart(2,'0')}`;
+
+  if (curSnapshotMeta.own_snapshot) {
+    badge.innerHTML = `<span class="snapshot-badge own">✦ свой снапшот</span>`;
+    hint.textContent = `Этот месяц имеет собственный сохранённый конфиг.`;
+    delBtn.style.display = 'block';
+  } else if (curSnapshotMeta.source_key) {
+    const [sy, sm] = curSnapshotMeta.source_key.split('-');
+    badge.innerHTML = `<span class="snapshot-badge inherited">← ${MONTHS_RU[+sm]} ${sy}</span>`;
+    hint.textContent = `Используется конфиг от ${MONTHS_RU[+sm]} ${sy}. Нажмите «Сохранить» чтобы зафиксировать отдельный конфиг для этого месяца.`;
+    delBtn.style.display = 'none';
+  } else {
+    badge.innerHTML = `<span class="snapshot-badge none">дефолт</span>`;
+    hint.textContent = `Нет сохранённого конфига. Используются настройки по умолчанию.`;
+    delBtn.style.display = 'none';
+  }
+}
+
+// ── Rooms ─────────────────────────────────────────────────────────
+function populateRooms() {
+  const list = document.getElementById('roomsList');
+  list.innerHTML = '';
+  snap.order.forEach((room, idx) => {
+    const active = snap.active.includes(room);
+    const item   = document.createElement('div');
+    item.className   = 'room-item' + (active ? '' : ' inactive');
+    item.draggable   = true;
+    item.dataset.idx = idx;
+    item.innerHTML   = `
+      <span class="drag-handle">⠿</span>
+      <span class="room-badge">${room}</span>
+      <span class="room-label">Комната ${room}</span>
+      <button class="toggle-btn" onclick="toggleRoom(${room})">${active ? 'выкл' : 'вкл'}</button>
+    `;
+    item.addEventListener('dragstart', onDragStart);
+    item.addEventListener('dragover',  onDragOver);
+    item.addEventListener('drop',      onDrop);
+    item.addEventListener('dragend',   onDragEnd);
+    list.appendChild(item);
+  });
+}
+
+function populateAnchorRoom() {
+  const sel = document.getElementById('anchorRoom');
+  sel.innerHTML = '';
+  globalConfig.rooms.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value       = r;
+    opt.textContent = `Комната ${r}`;
+    if (r === snap.anchor_room) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleRoom(room) {
+  if (snap.active.includes(room)) {
+    snap.active = snap.active.filter(r => r !== room);
+  } else {
+    snap.active.push(room);
+    snap.active.sort((a, b) => snap.order.indexOf(a) - snap.order.indexOf(b));
+  }
+  populateRooms();
+  refreshPreview();
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────
+function onDragStart(e) { dragSrcIndex = +e.currentTarget.dataset.idx; e.currentTarget.classList.add('dragging'); }
+function onDragOver(e)  { e.preventDefault(); document.querySelectorAll('.room-item').forEach(el => el.classList.remove('drag-over')); e.currentTarget.classList.add('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  const dest = +e.currentTarget.dataset.idx;
+  if (dragSrcIndex === dest) return;
+  const moved = snap.order.splice(dragSrcIndex, 1)[0];
+  snap.order.splice(dest, 0, moved);
+  populateRooms();
+  refreshPreview();
+}
+function onDragEnd(e) { e.currentTarget.classList.remove('dragging'); document.querySelectorAll('.room-item').forEach(el => el.classList.remove('drag-over')); }
+
+// ── Month navigation ──────────────────────────────────────────────
+function changeMonth(delta) {
+  curMonth += delta;
+  if (curMonth > 12) { curMonth = 1; curYear++; }
+  if (curMonth < 1)  { curMonth = 12; curYear--; }
+  loadMonth();
+}
+
+// ── Apply settings from panel → snap, refresh preview ────────────
+async function applySettings() {
+  snap.anchor_date  = document.getElementById('anchorDate').value;
+  snap.anchor_room  = parseInt(document.getElementById('anchorRoom').value);
+  snap.days_per_room = parseInt(document.getElementById('daysPerRoom').value);
+  await refreshPreview();
+  showToast('Применено. Нажмите «Сохранить» чтобы зафиксировать.', '');
+}
+
+// ── Re-fetch preview with current snap (without saving) ──────────
+async function refreshPreview() {
+  // We pass snap params as query args so backend recalculates without saving
+  const params = new URLSearchParams({
+    year:         curYear,
+    month:        curMonth,
+    order:        snap.order.join(','),
+    active:       snap.active.join(','),
+    days_per_room: snap.days_per_room,
+    anchor_date:  snap.anchor_date,
+    anchor_room:  snap.anchor_room,
+  });
+  const data = await fetch(`/api/preview_live?${params}`).then(r => r.json());
+  schedule   = data.schedule;
+  renderSchedule();
+}
+
+// ── Save snapshot for current month ──────────────────────────────
+async function saveSnapshot() {
+  const payload = {
+    order:         snap.order,
+    active:        snap.active,
+    days_per_room: parseInt(document.getElementById('daysPerRoom').value),
+    anchor_date:   document.getElementById('anchorDate').value,
+    anchor_room:   parseInt(document.getElementById('anchorRoom').value),
+  };
+  await fetch(`/api/snapshot/${curYear}/${curMonth}`, {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify(payload),
+  });
+  // Reload to reflect saved state
+  globalConfig = await fetch('/api/config').then(r => r.json());
+  await loadMonth();
+  showToast(`Конфиг для ${MONTHS_RU[curMonth]} ${curYear} сохранён ✓`, 'success');
+}
+
+// ── Delete snapshot for current month ────────────────────────────
+async function deleteSnapshot() {
+  await fetch(`/api/snapshot/${curYear}/${curMonth}`, { method: 'DELETE' });
+  globalConfig = await fetch('/api/config').then(r => r.json());
+  await loadMonth();
+  showToast('Снапшот удалён', '');
+}
+
+// ── Save global config (autosend only) ───────────────────────────
+async function saveGlobalConfig() {
+  await fetch('/api/config', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({ autosend: document.getElementById('autosend').checked }),
+  });
+}
+
+// ── PDF / Telegram ────────────────────────────────────────────────
+async function downloadPdf() {
+  showToast('Генерация PDF...', '');
+  window.location.href = `/api/generate_pdf?year=${curYear}&month=${curMonth}`;
+  setTimeout(() => showToast('PDF готов ⬇', 'success'), 1200);
+}
+
+async function sendTelegram() {
+  showToast('Отправка в Telegram...', '');
+  const res = await fetch('/api/send_telegram', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({year: curYear, month: curMonth}),
+  }).then(r => r.json());
+  showToast(res.message, res.status === 'ok' ? 'success' : 'error');
+}
+
+// ── Render ────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v;
+  document.getElementById('vt-table').classList.toggle('active', v === 'table');
+  document.getElementById('vt-calendar').classList.toggle('active', v === 'calendar');
+  renderSchedule();
+}
+
+function renderSchedule() {
+  if (currentView === 'table') renderTable();
+  else renderCalendar();
+}
+
+function renderTable() {
+  const days = Object.keys(schedule).map(Number).sort((a,b) => a-b);
+  let html = `<div style="overflow:visible;"><table class="schedule-table">
+  <thead><tr><th>Дата</th><th>День</th><th>Комната</th></tr></thead><tbody>`;
+  days.forEach(day => {
+    const d    = new Date(curYear, curMonth-1, day);
+    const wd   = d.getDay() === 0 ? 6 : d.getDay() - 1;
+    const isWe = wd >= 5;
+    const isTo = curYear === today.getFullYear() && curMonth === today.getMonth()+1 && day === today.getDate();
+    html += `<tr class="${isTo ? 'today-row' : isWe ? 'weekend' : ''}">
+      <td>${String(day).padStart(2,'0')}.${String(curMonth).padStart(2,'0')}.${curYear}</td>
+      <td><span class="wd-badge ${isWe?'wend':''}">${WD[wd]}</span></td>
+      <td><span class="room-pill">${schedule[day]}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('scheduleContainer').innerHTML = html;
+}
+
+function renderCalendar() {
+  const fwd         = (new Date(curYear, curMonth-1, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(curYear, curMonth, 0).getDate();
+  let html = `<div class="calendar-grid">`;
+  ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach((d,i) => {
+    html += `<div class="cal-header ${i>=5?'weekend':''}">${d}</div>`;
+  });
+  for (let i = 0; i < fwd; i++) html += `<div class="cal-day empty"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const wd   = (fwd + day - 1) % 7;
+    const isWe = wd >= 5;
+    const isTo = curYear === today.getFullYear() && curMonth === today.getMonth()+1 && day === today.getDate();
+    html += `<div class="cal-day ${isWe?'weekend':''} ${isTo?'today':''}">
+      <span class="day-num">${day}</span>
+      <span class="day-room">${schedule[day]}</span>
+    </div>`;
+  }
+  html += '</div>';
+  document.getElementById('scheduleContainer').innerHTML = html;
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show ' + type;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+init();
+</script>
+</body>
+</html>
