@@ -311,6 +311,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+const API_BASE = '{{ prefix }}';
 const MONTHS_RU = ["","Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const WD = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 const today = new Date();
@@ -334,7 +335,7 @@ let dragSrcIndex = null;
 
 // ── Init ─────────────────────────────────────────────────────────
 async function init() {
-  globalConfig = await fetch('/api/config').then(r => r.json());
+  globalConfig = await fetch(API_BASE + '/api/config').then(r => r.json());
   document.getElementById('autosend').checked = !!globalConfig.autosend;
   await loadMonth();
 }
@@ -345,8 +346,8 @@ async function loadMonth() {
   document.getElementById('scheduleTitle').textContent = `График — ${MONTHS_RU[curMonth]} ${curYear}`;
 
   const [snapResp, previewResp] = await Promise.all([
-    fetch(`/api/snapshot/${curYear}/${curMonth}`).then(r => r.json()),
-    fetch(`/api/preview?year=${curYear}&month=${curMonth}`).then(r => r.json()),
+    fetch(API_BASE + `/api/snapshot/${curYear}/${curMonth}`).then(r => r.json()),
+    fetch(API_BASE + `/api/preview?year=${curYear}&month=${curMonth}`).then(r => r.json()),
   ]);
 
   snap            = snapResp.snapshot;
@@ -480,7 +481,7 @@ async function refreshPreview() {
     anchor_date:  snap.anchor_date,
     anchor_room:  snap.anchor_room,
   });
-  const data = await fetch(`/api/preview_live?${params}`).then(r => r.json());
+  const data = await fetch(API_BASE + `/api/preview_live?${params}`).then(r => r.json());
   schedule   = data.schedule;
   renderSchedule();
 }
@@ -494,28 +495,28 @@ async function saveSnapshot() {
     anchor_date:   document.getElementById('anchorDate').value,
     anchor_room:   parseInt(document.getElementById('anchorRoom').value),
   };
-  await fetch(`/api/snapshot/${curYear}/${curMonth}`, {
+  await fetch(API_BASE + `/api/snapshot/${curYear}/${curMonth}`, {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify(payload),
   });
   // Reload to reflect saved state
-  globalConfig = await fetch('/api/config').then(r => r.json());
+  globalConfig = await fetch(API_BASE + '/api/config').then(r => r.json());
   await loadMonth();
   showToast(`Конфиг для ${MONTHS_RU[curMonth]} ${curYear} сохранён ✓`, 'success');
 }
 
 // ── Delete snapshot for current month ────────────────────────────
 async function deleteSnapshot() {
-  await fetch(`/api/snapshot/${curYear}/${curMonth}`, { method: 'DELETE' });
-  globalConfig = await fetch('/api/config').then(r => r.json());
+  await fetch(API_BASE + `/api/snapshot/${curYear}/${curMonth}`, { method: 'DELETE' });
+  globalConfig = await fetch(API_BASE + '/api/config').then(r => r.json());
   await loadMonth();
   showToast('Снапшот удалён', '');
 }
 
 // ── Save global config (autosend only) ───────────────────────────
 async function saveGlobalConfig() {
-  await fetch('/api/config', {
+  await fetch(API_BASE + '/api/config', {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify({ autosend: document.getElementById('autosend').checked }),
@@ -525,13 +526,13 @@ async function saveGlobalConfig() {
 // ── PDF / Telegram ────────────────────────────────────────────────
 async function downloadPdf() {
   showToast('Генерация PDF...', '');
-  window.location.href = `/api/generate_pdf?year=${curYear}&month=${curMonth}`;
+  window.location.href = API_BASE + `/api/generate_pdf?year=${curYear}&month=${curMonth}`;
   setTimeout(() => showToast('PDF готов ⬇', 'success'), 1200);
 }
 
 async function sendTelegram() {
   showToast('Отправка в Telegram...', '');
-  const res = await fetch('/api/send_telegram', {
+  const res = await fetch(API_BASE + '/api/send_telegram', {
     method:  'POST',
     headers: {'Content-Type': 'application/json'},
     body:    JSON.stringify({year: curYear, month: curMonth}),
